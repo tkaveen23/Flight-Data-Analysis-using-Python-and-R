@@ -1,0 +1,98 @@
+---
+title: "Question 1"
+author: "Thamilarasan Kaveen"
+date: "2023-03-27"
+output: html_document
+---
+
+```{r}
+# Import necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Import the combined dataset
+df_combined <- read.csv('D:/BSc/2nd year/Programming for Data Science/Coursework - R/combined_data.csv')
+
+# Add leading zero to values less than 1000 in CRSDepTime column
+df_combined$CRSDepTime <- ifelse(df_combined$CRSDepTime < 1000, paste0("0", df_combined$CRSDepTime),df_combined$CRSDepTime)
+
+# Remove missing values in DepTime and ArrTime columns
+df_drop <- df_combined[!is.na(df_combined$DepTime), ]
+df_drop <- df_combined[!is.na(df_combined$ArrTime), ]
+
+# Add arrival delay and departure delay to get total delay
+df_drop$TotalDelay <- df_drop$ArrDelay + df_drop$DepDelay
+
+# Add "." between the times in CRSDepTime column (ex: 0743 as 07.43)
+df_drop$CRSDepTime <- gsub("^(.{2})(.*)$", "\\1.\\2", df_drop$CRSDepTime)
+
+# Check class of CRSDepTime
+class(df_drop$CRSDepTime)
+
+# Convert it to numeric
+df_drop$CRSDepTime <- as.numeric(df_drop$CRSDepTime)
+```
+
+# To find the best time of the day to fly
+
+```{r echo=TRUE}
+# Create timebins with each bin having a width of 3 hours using the CRSDepTime column
+Timebins <- cut(df_drop$CRSDepTime, breaks=c(00.00, 03.00, 06.00, 09.00, 12.00, 15.00, 18.00, 21.00, 24.00))
+
+# Merge the Timebins column with the dataset
+df_drop['Timebins'] <- Timebins
+head(df_drop)
+
+# Group by Timebins and get the median delays in a table
+time_avg_delay <- df_drop %>% group_by(Timebins) %>% 
+  summarise(MedianDelay=median(TotalDelay),
+            .groups = 'drop')
+time_avg_delay
+```
+
+# Create side by side boxplots
+```{r echo=TRUE, warning=FALSE}
+ggplot(data=df_drop, aes(x=TotalDelay, y=Timebins)) + geom_boxplot(fill="red") +xlim(c(-100,100))+
+ggtitle('Horizontal Boxplots of Total Delay by Time of day') + ylab('Timebins(Hours)')
+```
+
+# The timebin 03:00 - 06:00 is the best time of the day to minimise delays
+
+# To find the best day of the week to fly
+
+```{r echo=TRUE}
+# Group by day of week and get the mean delays in a table
+day_avg_delay <- df_drop %>% group_by(DayOfWeek) %>% 
+  summarise(AverageDelay=mean(TotalDelay),
+            .groups = 'drop')
+day_avg_delay
+```
+
+# Create a bar plot with day on x axis and delay on y axis
+```{r echo=TRUE}
+ggplot(day_avg_delay, aes(x = DayOfWeek, y = AverageDelay, fill=DayOfWeek)) + geom_bar(stat = "identity") +
+ scale_x_continuous(breaks = 1:7, labels=c('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')) + 
+ theme(legend.position = "none") + ggtitle("Bar plot showing average delay for each day") + 
+ xlab("Day of Week") + ylab("Average Delay(min)")
+```
+
+# Saturday is the best day to fly to minimise delays
+
+# To find the best time of the year to fly
+
+```{r echo=TRUE}
+# Group by month and get the mean delays in a table
+month_avg_delay <- df_drop %>% group_by(Month) %>% 
+  summarise(AverageDelay=mean(TotalDelay), .groups = 'drop')
+
+month_avg_delay
+```
+
+# Create a line plot with month on x axis and delay on y axis
+```{r echo=TRUE}
+ggplot(month_avg_delay, aes(x = Month, y = AverageDelay)) + geom_line(color = 'blue') +
+  scale_x_continuous(breaks = 1:12, labels=c('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')) +
+  ggtitle('Line plot showing average delay for each month') + ylab('Average Delay(min)')
+```
+
+# September and November are the best months of the year to fly to minimise delays

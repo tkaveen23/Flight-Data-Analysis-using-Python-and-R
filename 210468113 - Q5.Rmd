@@ -1,0 +1,135 @@
+---
+title: "Untitled"
+author: "Thamilarasan Kaveen"
+date: "2023-03-30"
+output: html_document
+---
+
+```{r}
+# Import necessary libraries
+library(dplyr)
+library(caTools)
+library(ggplot2)
+library(caret)
+library(tidymodels)
+library(ROCR) # Library needed to plot the ROC curve
+
+# Import the combined dataset
+df_combined <- read.csv('D:/BSc/2nd year/Programming for Data Science/Coursework - R/combined_data.csv')
+
+# Check the data types
+str(df_combined)
+
+# Drop unnecessary columns
+data <- subset(df_combined, select = -c(UniqueCarrier,FlightNum,TailNum,Origin,Dest,Cancelled,CancellationCode,Diverted))
+
+# Check for null values
+sapply(data, function(x) sum(is.na(x)))
+
+# Remove null values
+data <- data[complete.cases(data),]
+```
+
+# Feature selection
+```{r echo=TRUE}
+# Import reshape2 library
+library(reshape2)
+
+# Calculate correlation coefficients between all the variables, rounded to 2 decimal places
+cor_df <- round(cor(data[sapply(data, is.numeric)]), 2)
+
+# Melt the data frame
+melted_cor <- melt(cor_df)
+
+head(melted_cor)
+
+# Create correlation heatmap
+ggplot(data = melted_cor, aes(x=Var1, y=ordered(Var2, levels = rev(sort(unique(Var2)))), fill=value)) + geom_tile() +
+  geom_text(aes(Var2, Var1, label = value), size = 2) +
+  scale_fill_gradient2(low = "blue", high = "red", limit = c(-1,1), name="Correlation") + 
+  ggtitle('Correlation heatmap') +  theme(axis.title.x = element_blank(),
+                                          axis.title.y = element_blank(),
+                                          axis.text.x= element_text(angle = 90))
+
+```
+
+# Splitting data
+```{r echo=TRUE}
+# Create new boolean column based on value in ArrDelay column. If ArrDelay > 15, 1 is assigned, else 0 is assigned
+data$ArrivalDelayed <- ifelse(data$ArrDelay > 15, 1, 0)
+
+# Check the class balance
+table(data$ArrivalDelayed)
+```
+# As you can see the classes seem to have imbalances. Accuracy will not be considered as a metric due to this.
+
+# Splitting data
+```{r}
+# Select the features with the target variable
+X <- subset(data, select = c(Month, DayOfWeek, CRSDepTime, DepDelay, TaxiOut))
+y <- subset(data, select = c(ArrivalDelayed))
+
+# Split X and y into training and testing sets
+set.seed(2)
+sample_split <- sample.split(data$ArrivalDelayed, SplitRatio = 0.75)
+X_train <- subset(X, sample_split == TRUE)
+X_test <- subset(X, sample_split == FALSE)
+y_train <- subset(y, sample_split == TRUE)
+y_test <- subset(y, sample_split == FALSE)
+```
+
+# Scaling the dataset
+```{r}
+prepro_train <- preProcess(X_train, method = c('center', 'scale'))
+X_train <- predict(prepro_train, X_train)
+prepro_test <- preProcess(X_test, method = c('center', 'scale'))
+X_test <- predict(prepro_test, X_test)
+```
+
+# Model development and prediction
+```{r echo=TRUE}
+# Train the model
+log_reg <- glm(unlist(y_train) ~., family = binomial, data = X_train)
+
+# Predict
+y_pred <- predict(log_reg, X_test, type = "response")
+y_pred_binary <- ifelse(y_pred > 0.5, 1, 0)
+head(y_pred_binary)
+```
+
+# Model evaluation
+```{r echo=TRUE}
+# Convert y_test and y_pred as factors to plot the confusion matrix
+y_test_factor <- as.factor(y_test$ArrivalDelayed)
+y_pred_factor <- as.factor(y_pred_binary)
+
+# Create a confusion matrix and a classification report
+matrix_report <- caret::confusionMatrix(data = y_pred_factor, reference = y_test_factor)
+matrix_report
+```
+# Sensitivity and Specificity are very high. Detection rate is reasonably good.
+ 
+```{r echo=TRUE}
+matrix_report_df <- data.frame(y_test_factor, y_pred_factor)
+
+cm <- conf_mat(data = matrix_report_df, truth = y_test_factor, estimate = y_pred_factor)
+
+autoplot(cm, type = "heatmap") + scale_fill_gradient(low = "pink", high = "cyan") +
+        ggtitle('Confusion Matrix') + xlab('Actual Delay') + ylab('Predicted Delay')
+```
+
+# ROC curve
+```{r echo=TRUE}
+roc_pred <- prediction(y_pred, y_test$ArrivalDelayed)
+roc_perf <- performance(roc_pred, 'tpr','fpr')
+plot(roc_perf)
+```
+
+# AUC value
+```{r echo=TRUE}
+auc.perf = performance(roc_pred, measure = "auc")
+print(paste0("auc = ", auc.perf@y.values))
+```
+
+# AUC is very high (0.956) therefore model is a good fit to predict arrival delays
+

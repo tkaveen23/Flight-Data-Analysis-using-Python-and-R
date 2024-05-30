@@ -1,0 +1,72 @@
+---
+title: "Untitled"
+author: "Thamilarasan Kaveen"
+date: "2023-03-29"
+output: html_document
+---
+
+```{r}
+# Import necessary libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Import the combined dataset
+df_combined <- read.csv('D:/BSc/2nd year/Programming for Data Science/Coursework - R/combined_data.csv')
+```
+
+# Date Time
+```{r echo=TRUE}
+# Remove rows that contain null values in arrival or dep delays
+df_edit <-df_combined[!is.na(df_combined$DepDelay | df_combined$ArrDelay),]
+
+# Add "." between the times in CRSDepTime column (ex: 0745 as 07:45)
+df_edit$CRSDepTime <- gsub("^(.{2})(.*)$", "\\1:\\2", df_edit$CRSDepTime)
+
+# Combine Year, Month, and DayofMonth column to create a Date column
+df_edit$Date<-as.Date(with(df_edit,paste(Year,Month,DayofMonth,sep="-")),"%Y-%m-%d")
+
+# Create new column called DateTimeCRSDepTime by combining Date and CRSDepTime columns
+df_edit$DateTimeCRSDepTime <- paste(df_edit$Date, df_edit$CRSDepTime, sep=" ")
+
+# Create a new column called TotalDelay
+df_edit$CurrentDelay <- df_edit$ArrDelay + df_edit$DepDelay
+
+# Remove unnecessary columns
+df_edit = subset(df_edit, select = c(TailNum, CurrentDelay, Origin, Dest, DateTimeCRSDepTime))
+
+# Sort the dataset by TailNum and then DateTimeCRSDepTime
+df_edit <- df_edit[order(df_edit$TailNum, df_edit$DateTimeCRSDepTime), ]
+
+# Create a new column which shows the previous delay by lagging the rows by 1
+df_edit$PreviousDelay <- dplyr::lag(df_edit$CurrentDelay, n=1)
+head(df_edit)
+
+```
+
+# Create a scatter plot to see if there is a relationship between delays in the previous flight and current flight
+
+```{r echo=TRUE}
+library(scattermore)
+ggplot(df_edit, aes(x = PreviousDelay, y =CurrentDelay)) + geom_scattermore() +
+                  ggtitle('Scatterplot showing delays in the previous flight vs delays in current flight')
+```
+# It is not possible to clearly say that there is a relationship since the points are all over the place.
+
+# Create a crosstab with probabilities
+```{r echo=TRUE}
+# Assign 0s and 1s for TotalDelay and PreviousDelay. If Delay > 0 then 1 is assigned, else 0 is assigned
+df_edit$PreviousDelay <- ifelse(df_edit$PreviousDelay > 15, 1, 0)
+df_edit$CurrentDelay <- ifelse(df_edit$CurrentDelay > 15, 1, 0)
+head(df_edit)
+
+# Assign 0s and 1s for TotalDelay and PreviousDelay. If Delay > 0 then 1 is assigned, else 0 is assigned
+crosstab <-table(df_edit$PreviousDelay,df_edit$CurrentDelay)
+
+# Crosstab with probabilities of the events occuring
+prop.table(crosstab, 1)
+```
+# 0.580 is the probability that there is a delay in the current airport given that there has been a delay in the previous airport
+# 0.420 is the probability that there is no delay in the current airport given that there has been a delay in the previous airport
+
+# 0.58 > 0.42 therefore the crosstab shows that cascading delays in the previous airport create delays in the current airport

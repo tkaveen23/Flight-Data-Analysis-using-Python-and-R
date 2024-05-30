@@ -1,0 +1,90 @@
+---
+title: "Untitled"
+author: "Thamilarasan Kaveen"
+date: "2023-03-28"
+output: html_document
+---
+
+```{r echo=TRUE}
+# Import necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Import the combined dataset and airports dataset
+df_combined <- read.csv('D:/BSc/2nd year/Programming for Data Science/Coursework - R/combined_data.csv')
+df_airport <- read.csv('D:/BSC/2nd year/Programming for Data Science/Coursework - R/airports.csv')
+
+# Have a look at the dataset
+head(df_airport)
+str(df_combined)
+
+# Check null values 
+sapply(df_airport, function(x) sum(is.na(x)))
+
+# Remove unecessary columns in airports dataset
+df_airport <- df_airport[, -c(2,3,5,6,7)]
+
+# Merge the combined dataset with the airports dataset by origin
+df_merge_airport <- merge(df_combined, df_airport, by.x = c('Origin'), by.y = c('iata'))
+
+# Rename the column state to Origin_state
+colnames(df_merge_airport)[colnames(df_merge_airport) == 'state'] = 'Origin_state'
+
+# Merge the combined dataset with the airports dataset by dest
+df_merge_airport <- merge(df_merge_airport, df_airport, by.x = c('Dest'), by.y = c('iata'))
+
+# Rename the column state to Dest_state
+colnames(df_merge_airport)[colnames(df_merge_airport) == 'state'] = 'Dest_state'
+
+# Remove missing values in Origin_state and Dest_state columns
+df_merge_airport <- df_merge_airport[!is.na(df_merge_airport$Origin_state), ]
+df_merge_airport <- df_merge_airport[!is.na(df_merge_airport$Dest_state), ]
+
+head(df_merge_airport)
+
+# Group by Year and Month and get the count of flights in a table
+flight_count <- df_merge_airport %>% group_by(Year, Month) %>% 
+  summarise(Number_of_flights=n(),
+            .groups = 'drop')
+
+flight_count$Year <- as.character(flight_count$Year)
+head(flight_count)
+```
+
+# Create a line plot with month in the x axis and number of flights in y axis
+```{r echo=TRUE}
+ggplot(flight_count, aes(x=Month, y=Number_of_flights, group=Year, color=Year)) + geom_line() +
+  scale_x_continuous(breaks = 1:12, labels=c('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')) +
+  ggtitle('Line plot showing number of flights per month in 2006 and 2007')
+```
+# Since there is no information of passengers, number of flights is taken. Assume that all flights are full
+# Number of flights has increased in 2007 when compared to 2006
+# February has the least flights, then there is a steady rise which peaks at August
+
+# Finding most and least popular flights state to state
+```{r echo=TRUE}
+
+# Create new column called Origin_Dest to combine Origin_state and Dest_state columns
+df_merge_airport$Origin_Dest <- paste(df_merge_airport$Origin_state, df_merge_airport$Dest_state, sep="_")
+
+# Group by Origin_Dest and get the count of flights
+org_dest_count <- df_merge_airport %>% group_by(Year, Origin_Dest) %>% 
+  summarise(Number_of_flights=n(),
+            .groups = 'drop')
+org_dest_count
+
+# Split the dataset into 2 by year
+count_2006 <- subset(org_dest_count,Year %in% c("2006"))
+count_2007 <- subset(org_dest_count,Year %in% c("2007"))
+
+# Sort the new datasets in descending order
+count_2006 <- count_2006[order(-count_2006$Number_of_flights),]
+count_2007 <- count_2007[order(-count_2007$Number_of_flights),]
+
+# See the tables
+head(count_2006)
+head(count_2007)
+```
+# The tables shows the most and least frequently used routes
+# In 2006, the top 5 routes are CA_CA, TX_TX, HI_HI, CA_AZ and AZ_CA
+# In 2007, the top 5 routes are CA_CA, TX_TX, HI_HI, AZ_CA and CA_AZ
